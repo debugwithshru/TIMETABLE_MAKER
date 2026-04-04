@@ -331,13 +331,26 @@ document.addEventListener('DOMContentLoaded', () => {
             timetableData[day] = dayObj;
         }
 
+        // Calculate dynamic height for n8n screenshot
+        let totalLecRows = 0;
+        let dayCount = 0;
+        for (const day in timetableData) {
+            if (timetableData[day].lectures.length > 0 && !timetableData[day].holiday) {
+                totalLecRows += timetableData[day].lectures.length;
+                dayCount++;
+            }
+        }
+        // Base headers (~280) + Table Header (~60) + (Rows * 65) + Bottom Padding (~80)
+        const calcHeight = 280 + 60 + (totalLecRows * 65) + 80;
+
         const finalPayload = {
             made_by: formData.get('made_by'),
             grade: formData.get('grade'),
             batch: batches.join(','),
             branch: formData.get('branch'),
             submission_date: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
-            timetable: timetableData
+            timetable: timetableData,
+            calculated_height: calcHeight
         };
 
         // Generate the gorgeous HTML components for n8n
@@ -347,7 +360,7 @@ document.addEventListener('DOMContentLoaded', () => {
         finalPayload.html_css = htmlParts.css;
 
         // Submit to Webhook via JSON POST request
-        const WEBHOOK_URL = 'https://n8n.srv1498466.hstgr.cloud/webhook-test/f2a69329-3814-4cb5-9123-7c1c3d063421';
+        const WEBHOOK_URL = 'https://n8n.srv1498466.hstgr.cloud/webhook/f2a69329-3814-4cb5-9123-7c1c3d063421';
         
         const btn = document.getElementById('submitBtn');
         btn.disabled = true;
@@ -408,12 +421,6 @@ document.addEventListener('DOMContentLoaded', () => {
             function generateTimetableHTML(payload) {
         let titleElements = [];
         titleElements.push("GRADE " + payload.grade);
-        if (payload.batch && !payload.batch.includes(',')) {
-            titleElements.push("BATCH " + payload.batch.toUpperCase());
-        }
-        if (payload.branch && payload.branch !== 'none') {
-            titleElements.push(payload.branch.toUpperCase() + " BRANCH");
-        }
         const subtitleText = titleElements.join(' - ');
 
         let startDateStr = '';
@@ -465,7 +472,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             .timetable-wrapper {
-                width: 800px; /* Reduced width for WhatsApp viewing */
+                width: 960px; /* Increased width to provide more horizontal space for all 5 columns */
                 position: relative;
                 padding: 40px;
                 background: #fdfaf6;
@@ -579,7 +586,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 font-weight: 700; 
                 font-size: 16px; 
                 text-transform: uppercase;
-                width: 13%;
+                width: 12%; /* Slightly reduced to give more to others */
                 vertical-align: middle;
             }
 
@@ -593,7 +600,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             .time-col { 
                 font-weight: 500; 
-                width: 29%; 
+                width: 28%; 
+                white-space: nowrap; /* Strictly forbids wrapping */
             }
 
             .subj-col { 
@@ -609,8 +617,9 @@ document.addEventListener('DOMContentLoaded', () => {
             
             .teacher-col { 
                 font-weight: 600; 
-                width: 18%; 
+                width: 20%; 
                 text-transform: uppercase;
+                white-space: nowrap; /* Strictly forbids wrapping */
             }
         `;
 
