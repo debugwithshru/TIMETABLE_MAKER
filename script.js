@@ -422,11 +422,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 branch: formData.get('branch'),
                 submission_date: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })
             }));
-            submitData.append('made_by', formData.get('made_by'));
-            submitData.append('grade', grade);
-            submitData.append('batch', batchStr);
-            submitData.append('branch', formData.get('branch'));
-            submitData.append('submission_date', new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }));
 
             btn.textContent = 'Submitting...';
 
