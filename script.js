@@ -4,6 +4,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const lectureTemplate = document.getElementById('lectureTemplate').innerHTML;
     const form = document.getElementById('timetableForm');
 
+    const notesContainer = document.getElementById('notesContainer');
+    const addNoteBtn = document.getElementById('addNoteBtn');
+    const examNoticeFields = document.getElementById('examNoticeFields');
+    const scheduleTypeRadios = document.querySelectorAll('input[name="schedule_type"]');
+
     const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
     
     const teachers = [
@@ -27,6 +32,29 @@ document.addEventListener('DOMContentLoaded', () => {
     // Object to remember the very first time entered for a specific lecture number globally
     // e.g. "1_from": "10:00", "2_to": "12:00"
     const globalLectureTimes = {};
+
+    // 0. Setup UI Toggles (Exam Notice & Notes)
+    scheduleTypeRadios.forEach(radio => {
+        radio.addEventListener('change', (e) => {
+            if (e.target.value === 'Exam') {
+                examNoticeFields.style.display = 'grid';
+                examNoticeFields.querySelectorAll('select, input').forEach(el => el.required = true);
+            } else {
+                examNoticeFields.style.display = 'none';
+                examNoticeFields.querySelectorAll('select, input').forEach(el => el.required = false);
+            }
+        });
+    });
+
+    addNoteBtn.addEventListener('click', () => {
+        const row = document.createElement('div');
+        row.className = 'note-row';
+        row.innerHTML = `
+            <input type="text" name="parent_notes[]" placeholder="Enter a note for parents...">
+            <button type="button" class="remove-note-btn" onclick="this.parentElement.remove()">✕</button>
+        `;
+        notesContainer.appendChild(row);
+    });
 
     // 1. Generate Days Sections
     daysOfWeek.forEach((day, index) => {
@@ -261,425 +289,465 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // 6. Form Submission Logic
-    form.addEventListener('submit', (e) => {
+    form.addEventListener('submit', async (e) => {
         e.preventDefault();
 
-        // Gather Data
-        const formData = new FormData(form);
-        const params = new URLSearchParams();
+        const btn = document.getElementById('submitBtn');
+        btn.disabled = true;
+        btn.textContent = 'Generating PDF...';
 
-        // Custom handling for multiple batches
-        const batches = [];
-        form.querySelectorAll('input[name="batch"]:checked').forEach(cb => {
-            batches.push(cb.value);
-        });
-        
+        const formData = new FormData(form);
+        const batches = Array.from(form.querySelectorAll('input[name="batch"]:checked')).map(cb => cb.value);
+
         if (batches.length === 0) {
             alert("Please select at least one Batch.");
+            btn.disabled = false;
+            btn.textContent = 'Submit Timetable';
             return;
         }
 
         // Loop through days and gather payload dynamically
         const timetableData = {};
+        const schedule = [];
+        const testRowIndices = [];
+        let scheduleIdx = 0;
+
         for (const day of daysOfWeek) {
             const dayLower = day.toLowerCase();
             const isHoliday = formData.get(`holiday_${dayLower}`) === 'Yes';
             const dateVal = formData.get(`date_${dayLower}`);
             
-            const dayObj = {
-                date: dateVal,
-                holiday: isHoliday,
-                lectures: []
-            };
+            const dayObj = { date: dateVal, holiday: isHoliday, lectures: [] };
 
             if (!isHoliday) {
                 const lCount = parseInt(formData.get(`lecture_count_${dayLower}`)) || 0;
-                for(let i=1; i<=lCount; i++) {
-                    // Check if Subject is actually selected
+                for (let i = 1; i <= lCount; i++) {
                     const subj = formData.get(`subject_${dayLower}_${i}`);
                     if (!subj) {
-                        alert(`Please select a valid subject from the dropdown for ${day} Lecture ${i}`);
-                        return; // Halt submission
+                        alert(`Please select a valid subject for ${day} Lecture ${i}`);
+                        btn.disabled = false; btn.textContent = 'Submit Timetable';
+                        return;
                     }
 
-                    // Format the custom pickers to HH:MM AM/PM
                     const getTimeString = (d, num, t) => {
                         const h = formData.get(`hr_${t}_${d}_${num}`);
                         const m = formData.get(`min_${t}_${d}_${num}`);
                         const a = formData.get(`ampm_${t}_${d}_${num}`);
-                        return (h && m) ? `${h.padStart(2, '0')}:${m.padStart(2, '0')} ${a}` : '';
+                        return (h && m) ? `${h.padStart(2,'0')}:${m.padStart(2,'0')} ${a}` : '';
                     };
-
                     const timeFrom = getTimeString(dayLower, i, 'from');
                     const timeTo = getTimeString(dayLower, i, 'to');
 
                     if (!timeFrom || !timeTo) {
-                        alert(`Please completely fill Hours and Minutes for ${day} Lecture ${i}`);
-                        return; // Halt submission
+                        alert(`Please fill Hours and Minutes for ${day} Lecture ${i}`);
+                        btn.disabled = false; btn.textContent = 'Submit Timetable';
+                        return;
                     }
 
-                    dayObj.lectures.push({
-                        lecture_num: i,
-                        time_from: timeFrom,
-                        time_to: timeTo,
+                    const isTest = formData.get(`is_test_${dayLower}_${i}`) === 'Yes';
+                    if (isTest) testRowIndices.push(scheduleIdx);
+
+                    const formatDate = (iso) => {
+                        if (!iso) return '';
+                        const d = new Date(iso);
+                        return `${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}-${d.getFullYear()}`;
+                    };
+
+                    schedule.push({
+                        day: day,
+                        date: formatDate(dateVal),
+                        time: `${timeFrom} to ${timeTo}`,
                         subject: subj,
-                        topic: formData.get(`topic_${dayLower}_${i}`),
+                        chapter: formData.get(`topic_${dayLower}_${i}`) || '',
                         teacher: formData.get(`teacher_${dayLower}_${i}`)
+                    });
+                    scheduleIdx++;
+
+                    dayObj.lectures.push({
+                        lecture_num: i, time_from: timeFrom, time_to: timeTo,
+                        subject: subj, topic: formData.get(`topic_${dayLower}_${i}`),
+                        teacher: formData.get(`teacher_${dayLower}_${i}`), is_test: isTest
                     });
                 }
             }
             timetableData[day] = dayObj;
         }
 
-        // Calculate dynamic height for n8n screenshot
-        let totalLecRows = 0;
-        let dayCount = 0;
-        for (const day in timetableData) {
-            if (timetableData[day].lectures.length > 0 && !timetableData[day].holiday) {
-                totalLecRows += timetableData[day].lectures.length;
-                dayCount++;
-            }
-        }
-        // Base headers (~280) + Table Header (~60) + (Rows * 65) + Bottom Padding (~80)
-        const calcHeight = 280 + 60 + (totalLecRows * 65) + 80;
+        // Gather notes
+        const notes = [];
+        document.querySelectorAll('#notesContainer input[name="parent_notes[]"]').forEach(input => {
+            if (input.value.trim()) notes.push(input.value.trim());
+        });
 
-        const finalPayload = {
-            made_by: formData.get('made_by'),
+        // Determine week label from first/last dates
+        const dayKeys = Object.keys(timetableData);
+        const firstDate = timetableData[dayKeys[0]]?.date;
+        const lastDate = timetableData[dayKeys[dayKeys.length - 1]]?.date;
+        const fmtWeekDate = (iso) => {
+            if (!iso) return '';
+            const d = new Date(iso);
+            const day = d.getDate();
+            const month = d.toLocaleString('en-US', { month: 'long' });
+            return `${day} ${month}`;
+        };
+        const weekLabel = `${fmtWeekDate(firstDate)} - ${fmtWeekDate(lastDate)}`;
+
+        const isExam = formData.get('schedule_type') === 'Exam';
+        const config = {
             grade: formData.get('grade'),
-            batch: batches.join(','),
-            branch: formData.get('branch'),
-            submission_date: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
-            timetable: timetableData,
-            calculated_height: calcHeight
+            batches: batches.join(', '),
+            week_label: weekLabel,
+            exam_school: isExam ? formData.get('exam_school') : null,
+            exam_dates: isExam ? formData.get('exam_dates') : null,
+            schedule: schedule,
+            test_row_indices: testRowIndices,
+            notes: notes
         };
 
-        // Generate the gorgeous HTML components for n8n
-        const htmlParts = generateTimetableHTML(finalPayload);
-        finalPayload.html_full = htmlParts.full;
-        finalPayload.html_body = htmlParts.body;
-        finalPayload.html_css = htmlParts.css;
+        try {
+            btn.textContent = 'Generating PDF...';
+            const pdfBlob = await generatePDF(config);
 
-        // Submit to Webhook via JSON POST request
-        const WEBHOOK_URL = 'https://n8n.srv1498466.hstgr.cloud/webhook/f2a69329-3814-4cb5-9123-7c1c3d063421';
-        
-        const btn = document.getElementById('submitBtn');
-        btn.disabled = true;
-        btn.textContent = 'Submitting...';
+            // Build multipart FormData payload
+            const grade = formData.get('grade');
+            const batchStr = batches.join(',');
+            const fileName = `Cocoon_Schedule_Grade${grade}_${batchStr}_${new Date().toISOString().split('T')[0]}.pdf`;
 
-        fetch(WEBHOOK_URL, { 
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(finalPayload)
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`Webhook returned HTTP ${response.status}`);
-            }
+            const submitData = new FormData();
+            submitData.append('pdf', pdfBlob, fileName);
+            submitData.append('config_json', JSON.stringify({
+                ...config,
+                timetable: timetableData,
+                made_by: formData.get('made_by'),
+                branch: formData.get('branch'),
+                submission_date: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })
+            }));
+            submitData.append('made_by', formData.get('made_by'));
+            submitData.append('grade', grade);
+            submitData.append('batch', batchStr);
+            submitData.append('branch', formData.get('branch'));
+            submitData.append('submission_date', new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }));
+
+            btn.textContent = 'Submitting...';
+
+            const WEBHOOK_URL = 'https://n8n.srv1498466.hstgr.cloud/webhook/f2a69329-3814-4cb5-9123-7c1c3d063421';
+            const response = await fetch(WEBHOOK_URL, { method: 'POST', body: submitData });
+
+            if (!response.ok) throw new Error(`Webhook returned HTTP ${response.status}`);
+
             document.getElementById('successOverlay').classList.add('active');
-            
-            // Optional: reset form after success
-            setTimeout(() => {
-                window.location.reload(); 
-            }, 3000);
-        })
-        .catch(error => {
+            setTimeout(() => window.location.reload(), 3000);
+
+        } catch (error) {
             console.error('Submission Error:', error);
             document.getElementById('errorOverlay').classList.add('active');
             btn.disabled = false;
-            btn.textContent = 'Submit';
-        });
+            btn.textContent = 'Submit Timetable';
+        }
     });
 
-    // ==========================================
     // 8. Restore Browser bfcache State on Load or Back-Arrow
-    // ==========================================
     const syncBrowserState = () => {
-        // Trigger holiday toggles to visually sync CSS if browser marked them as "Yes"
-        document.querySelectorAll('input[type="radio"][value="yes"]:checked').forEach(radio => {
-            if (radio.name.startsWith('holiday_')) {
-                radio.dispatchEvent(new Event('change'));
-            }
+        document.querySelectorAll('input[type="radio"][value="Yes"]:checked').forEach(radio => {
+            if (radio.name.startsWith('holiday_')) radio.dispatchEvent(new Event('change'));
         });
-        
-        // Retrigger any cached lecture count numbers to regenerate visual DOM chunks
         document.querySelectorAll('input.lecture-count').forEach(input => {
-            if (input.value) {
-                input.dispatchEvent(new Event('input'));
-            }
+            if (input.value) input.dispatchEvent(new Event('input'));
         });
+        const checkedType = document.querySelector('input[name="schedule_type"]:checked');
+        if (checkedType) checkedType.dispatchEvent(new Event('change'));
     };
 
     setTimeout(syncBrowserState, 100);
+    window.addEventListener('pageshow', (e) => { if (e.persisted) syncBrowserState(); });
 
-    // If user hit the back/forward arrow, the 'pageshow' event triggers it safely
-    window.addEventListener('pageshow', (e) => {
-        if (e.persisted) syncBrowserState();
-    });
+    // 9. Client-side PDF Generation using jsPDF (Pixel-Perfect with Python Reference)
+    async function generatePDF(config) {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+        
+        // Exact Brand Colors
+        const NAVY = [27, 42, 74];
+        const ORANGE = [232, 119, 34];
+        const ORANGE_PALE = [255, 243, 232];
+        const SUNSET_TINT = [255, 228, 210];
+        const GREY_ROW = [240, 244, 248];
+        const BLACK = [26, 26, 26];
+        const GREY_TEXT = [85, 85, 85];
+        const BORDER_GREY = [218, 221, 227];
 
-            function generateTimetableHTML(payload) {
-        let titleElements = [];
-        titleElements.push("GRADE " + payload.grade);
-        const subtitleText = titleElements.join(' - ');
+        const MARGIN_L = 18;
+        const MARGIN_R = 18;
+        const USABLE_W = 210 - MARGIN_L - MARGIN_R;
 
-        let startDateStr = '';
-        let endDateStr = '';
-        const dayKeys = Object.keys(payload.timetable);
-        if (dayKeys.length > 0) {
-            const firstDateStr = payload.timetable[dayKeys[0]].date;
-            const lastDateStr = payload.timetable[dayKeys[dayKeys.length - 1]].date;
-            
-            const formatDate = (isoString) => {
-                if (!isoString) return '';
-                const d = new Date(isoString);
-                if (isNaN(d.getTime())) return isoString;
-                const day = d.getDate();
-                const suffix = ["th", "st", "nd", "rd"][day % 10 > 3 ? 0 : (day % 100 - day % 10 != 10) * (day % 10)];
-                const month = d.toLocaleString('en-US', { month: 'long' });
-                return `${day} ${month}`; // user mockup just says 6th April (well without th in my format here, wait: 6th April. I'll keep default.)
-            };
-            startDateStr = formatDate(firstDateStr);
-            endDateStr = formatDate(lastDateStr);
+        // Load logo
+        const logoImg = document.querySelector('header .logo');
+        let logoDataUrl = null;
+        if (logoImg) {
+            try {
+                const canvas = document.createElement('canvas');
+                canvas.width = logoImg.naturalWidth || 100;
+                canvas.height = logoImg.naturalHeight || 100;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(logoImg, 0, 0);
+                logoDataUrl = canvas.toDataURL('image/png');
+            } catch(e) { console.warn('Could not load logo:', e); }
         }
 
-        const parseFormatDate = (ds) => {
-            if (!ds) return '';
-            const d = new Date(ds);
-            return `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth()+1).padStart(2, '0')}-${d.getFullYear()}`;
-        };
+        // --- 1. HEADER ---
+        if (logoDataUrl) {
+            doc.addImage(logoDataUrl, 'PNG', MARGIN_L, 14, 18, 20);
+        }
+        
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(13);
+        doc.setTextColor(...ORANGE);
+        doc.text("COCOON", 40, 19);
+        doc.setTextColor(...NAVY);
+        // Measure "COCOON" width to place " GROUP TUITION" right after it
+        const cocoonWidth = doc.getTextWidth("COCOON");
+        doc.text(" GROUP TUITION", 40 + cocoonWidth, 19);
+        
+        doc.setFont("helvetica", "italic");
+        doc.setFontSize(7.5);
+        doc.setTextColor(...GREY_TEXT);
+        doc.text("A Tutorial to Transform Your Child", 40, 24);
 
-        const logoBase64 = "data:image/webp;base64,UklGRrwPAABXRUJQVlA4ILAPAABwRQCdASrRAOoAPp1Gnkslo6Khp1NbGLATiWJu3V4dpx+Z7cTT3kf7r+4/9499uzf5v8acqyezuLzt/6f1a/qj2Bf1W6YXmD/b/1ofSZ/jfSk6lD0GOmFyFfzn2a48+037Up7P63vV4AXh/egQBd1tNBVcvS+iQ0A/s++Y/d/2bDPcbSvQ4o8YxoKhqpu/ACoDVGJNSSCte2ykaiWO7uHSM7vud/9SmirK76PWZNr0FjR7rLdOq0XF8oAJfKrYMM2qbOaAUN8yF79GfuD//5zHaiNzF1Ynhv9yf+MEz6qEl6Q/4zaBNAiJf3vbdXKSdnMCh0bF01yD6ftnXJoFEDo633uJ1r3B+vCCvt1l/WBYvnAJst9KBsv874vNQMXuFkerM7SyveNRY9mYjS6YFQ0YkmZLS+mX6nkt7yqi18f/J0tlowYGoucoSZnaGmL2MuUpfXOXo/PnVneEhrfg9t/NjRnwTZ+TN4WwUo20vSNXj4n9n1hklOGjrh4gNgHQ6siM1tlD7cPnJrYZJy0Oz+63ce2hQmcAMoRIb4/4dkIGXsvWl+ZB2nJyTq9oksg4V+vSp2hR9v5N1to3zyhWtHzKh3Bh6DPJ0XVcrWDRplK6Ri4Fo4mPp3Y6ae3vMoICZP3VrnFBQGv9MZWytD+ZSf01jdP2MpwY/If7pC3t2ts8WnEcPoz61ox/mhARrWJaf6C2mDQ4HZovVQBSzhLu/uc7+f/+gVms1mwcOprV2zllULgiDuAA/vpeAVz6sjYbBzqIMLpaGbnFgv2qhGBl/QV/8BWiC5oFihItZaL7j6XYKqcIE3rdMRYCqpawhyTFFdWpmLHNiGsLJzHAb3rWhdeRaUaHbz9VT4mgdSreRh/y7tnAbLDPUdPP+v2EI27m5ZJktxOEJzVYdqxu+IB4C87xydVXkwPdL1LlONsNpgK6oxGgwUL4Ay2BK9mGsny09z91+Im1efmLMDcGhIyJdn1Gr3GPeRCCUtCnNvxYvlHXaOr+yKRN/1ktJMyFO+ukJMyQrrxykoDCOI6WixTrMJZ1N1x/keesk56k1Wu9pQVW2QqCjEASD62v3QBKNBGLMtfnblOFdjHBGJBfDBh4LUHFDwcX/shpPV0Vv5JU8z5ZsTtQBfVJoQq7BqB4nQGEUpK2eXD3FjgVTCW3rIukSNXvLojuUUcckFFrXUvgDjqBIao6OO9JRhoB8JZTy7w1BjJ4QdhTUTQsAAbPeWypKFEStQFXbHDlCMvNLmNDiqhSHAjP3aHHJc6gq70yv2wn/ryZViERJpRaWbPr2bERxN+ROxh8IrRlqNpubY9In2xM4lY3ECIHoUIUazjvHB4NXz6bJ+GRDgC/3HZUdHiU2QjQVkW5qRO4sWr+xS9dHldvIj8HbSgdpKZXHdMGp3p+PG4QvI8npAz6qLLxjPk639uTh8OHcGvF9ILXyzfm6PwTo/NqEO+XOz0OfbH67SSIk1/xgocrv6DReZI5vXBgXzxueLjWBbfQSJmMt16h+ZyDMGMwe842I68lR/VOTlPLensm694YTwNj4iQUbvQOeYRO282UACsOOlY88F/TyGP9sc2BKNZPGqP4R0uYqOq9aH36ar3kK8Qe3IXRSrTCUqPKdNjaZAADnJVsxKGo4pTPtB+KMh1vj0/X6Oo6wFIlKuMnSDq5XnYklok2vrsTc2qAbq9lWHp5RO20y8xLqiXmDhh0DUjpI4VuRDOosSfanNTYWHJcCWAcD43TC/jOtlGclAZ5w38+58C/ZBoYkpT0QdkW224gvvTrYmzEGYeAFbkyCSiMgTCxSwA1B2LiKNKZogIQo48yNhg1t6jntjDjwavBE15t+cBOROIEX2Fc/b7e392scSS1ovLdmgwNMMZaVER7JNalAo0oDk4rhgIHnO1naGgBwJInNF76WAsupWRYDboLwNX4v6RmynF7xvRvfkTxd0NP75hDSoAYycS4xDlkbt9UIz2hgxsu/nCk1BTWwQ/0lnkd8RRHyYwSndW56s7/J8rn6uH080oPnzRBf+gtxk+rb3yE9rxouL+yqwtiy/XYri+UiDkzYofaB4lLReSobYQ4LbjnPFUrDo7YgTs9Nh/9+4lpr3n/cb4XZSJaUzSjXf/kugqZ44kgg08omVMpP2aOn6AAPFB8zRe5F/YjGVcck3uH4N8KKOefJ+JZhBaeNk/v/kTLE3fKbPl3erGophBxK4xG7O0GFnPqP23ugKqn9nXsj4OzcWU8K51k3qYoYEim7EqclAlY5BVz/UzRnWNKqTx2gjHZvBOO9Nni+wa8XXr8RjRIbVmmSzNTBW2nx+gZmkx92m2yAJS3A2R/HiMGTqZG5xJI1qV9Hz90wXnQ+43hDIYdYhljTfCJ5hruRJ3krsZsYkvcN4X+zNhyCLbpWpHcCIxrjolmxje1hBoXdDk17RlbGL5CbsCpuX5mlFFe577PmHxOEMBXmDq98AsArI/V+cf60klCE3I4zCubdUqaHzN0Qz5l6bBoMyAqZCGinupCLc9vPKQPFYpjlLotc3f2dX8YjIRkg3iFA5LNYGuaTX9DoPjDRT0Zi9GRInInbVcunj/hmYIfZH9ZgTTOPL8ve5cpxWERKHwIcUbYYd+IgtEoj1s5ta3MetIs0/SLeoE8LYgYu/RdyqC7p5hSyGiTrHu3RHZFPe2pSPwhZXrJPk+RgPfQRX26fbD0YdN9bWI7K1Ttsaawhsx7v6QzowLYrcfL6FirKFmH9cIvl2XweBg9dKtMKbvzJace7BwoiB6Oida2kPk8I2BHXglVx7gHdX2RqVJ5UY9RGY034rNRMBRzfeXpTFzLewILMmOxGY0v3VIYyXGZK/tjDS2tTvT0n44hs3WKMmZAzAVECl64bnqSiDV0Rxdnk6Adduy5EIm6FqsjbQf1yqTJpal9VVqNngpWvdPqle12HrxbkfnPtCsVcBfGGcfswDLuv5duPac9ddIs/bja48/Cy3gDZ1qNSAG2bW2tKJlpU9aGSb6vU7793qEfi1tJ/wJilf3UMOzLTA08JATaBTp6ABHsgpyRyslmSu+sCDVhr8S9w12NocVKsDX6AIDEat+SrFttMkjENZkiTJrkSxDjXUWJwdO7yYiCUCXsFoe4aa4JXqxubyA1nZcQlia3j52vXA4vpc8FHEOZG9TTXT9/K5KSwfBCYcIQvrmSj8xyFvOIdNfEe1OHiat4PTN3GGwGUEUxUIwub3YQvcC+/Z7K+O74yveKsXVGJrDuheaIKw0V6VLC8y5YOF+/to7r80tteIaHB9PdY0OZlNBgxHlLNFAdkWTTOdNp6wNaluE8MfFrxkxVMT8GyFqlOZ2z5IwXWEI3yTARl24cKA9z6CA9H6t1SR7A77po0MH4KUSk/21G+8P6aPPn5UbGapp460yMlRVzBvEd11Fq+JvnwVGyNbwLmAo2QW7yaZJgeLaAsZteYzYLzY15HZYmMhaA3jupLxvlJSKXuzvMtk2oPlrnIBHLrmrWxz3LA7dPJ9UEeP7pWJPi1Z4mAwDWiHeTQHFEJuPrX8x3NpsEhA0eEwstUkSyKVHCwF+1hp0fGIeM9OuY7a1chai9fb7xr1oSeF9Yylz+DPeNRvZFhIpKbx9tjg0w0Mgj2pPJk0TSAtx8TtDou0b8qL301zNh7Qqx+yWh1/nBdywBuGQXDK+VBL9RNp16dyWQuR8BC0X21UUMgAXV7Ka/XPkO077dagto+G6R/fJbfVRFAb3AI3yhAyKM6AXawOPobBivUVvBrotItAeuSkyywXBgiF6ezugJl7ptp0BW5CGWpNkouWh+ZDuyTbHVZtDhMTPp3BeQupONMbtodJTSWBiNOgYFmyNTEJt5cf3FaQOFThnVI0fQRxk+bdn1gl/NrfoWNpIa7zOjsSJmUontioq7NgrwffkC6rTOf4+k6jTckbk8JYSUaM1Xc1/jg8olwaSldRqQ4ztxnV9yV/jiB//ZE+JiwINCV+N1FXO1e3RPVOF1h/PTdE9si1zCVmBC5dxANfoZDm2r73k1SPb3tTYgpGl0J8j+zb3IdN2xwy+ezaHphNzh/xUK5qaJ4vWUqR/sbqTGYkHJxPn13r0yFVJCYwcPPgOuYAPG56VwMNY5dhnfVlZr2Ew4G1e/CtyEM0oiX6QsW1DjmUdln5ORVouok/nr3PtFsfAPjiR51tZCj0FUHMlbxQRdrNaNtDmPtxpcp3etDTQihmgPyRXsRAEtI351+KqhaH5UryTHYHa+nRmI2IfVKrTeFWlMCUqX2cuF+k5sMfVcylktf5QLS0HjeXXMsLnLM5v/nSPKKSt348WeulS4hCaMJhmgwibLxEJh4bw2oNZ4c73at8U6sFIKA+HH4BGhhIOw5WJTR4FPRjoxLT1E7OFnPmSMB4sXhXKg/GUnBNndG7i4OsRI1VqLcmBf/jO9borqwAic7FAIBqkV43RcBI4431d7oZXi0NyebeaZM8CCLsvLvKOBQQ3je5gnNOOShX7NX+UUkZ9jzx0Dhz956iowJWTyqozLzXj8KScfDahF8GL2Y6zmg+i3E1afCzW+j8fDml96YD8WxK/SR/QZOuW3AkKOyooXPaG027dOGn+UPP16x1XzreCJHAl6PIuBDw9n8fJUny3FMeADDffv+do2mfinfRxGNTMhU78uAGFMQaiiFMB56fdU7y2oVlZCtycVDEdzcPDQms7+EvfY9L5F48KChJWbSw6BS9OPIT1y9WMrNUdvWJnOHKHDGKhunFReWMZL+L5CVx6gGr4s+QTYb5ZhTr/2hpyagblRp+e3PgiV5Ee5vWE8ZZ0CiX72JWBKsRVY8pWOHzXuzJk+uPV4JC+THd1MtN8ABm4yGrx+g1keqTkKbHixRPHYmhTl8u7I2Ux443IDtgHsqUylYIk79NW1b7rUKxJIyV0c3aES18fkPx9IeCXQ4/1Bk1By1efxUtMdx9IqtLRc8CkYkdmJEqTBGEMbExG2ibRQESMAcjPSDs7jEPS678H2A9KpoS6/fLpL5YZ3IumCtVUvB2Zmy0OMAgbcFi2jxl7y/IuFLZhLUZEZ/5h1thkpIs2uwSAmoiNmGKS9INkeJY5kP20+CT/O4cF5WNbmorfhKj5ihZZ2o+4OPey5ujGdLkjPA0VhQJUJsN+fm9w9mwXz0znnegVYxTHoQcMF3BjAg3e2IgmmxSv/FRTYOzxnxPmz4uVNqdqAcvJoyCzmEoVpa2TnoJ4EmI6YiTXLyHuKjBNWP/bE9/5rLIC/J2VNXtP60/X9IIeGObz7xw1epU2evTnEZMT/csBahaEP6cMB+Yq1LgpxVyThK2WwUgAb/AARrZPBmjMvbNaZX1iJKFwoadoWRtG0xXRS9gAAAAAAAA==";
+        // Divider Line
+        doc.setDrawColor(...ORANGE);
+        doc.setLineWidth(0.7); // approx 2pt
+        doc.line(MARGIN_L, 36, 210 - MARGIN_R, 36);
 
-        const css = `
-            @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap');
-            
-            :root {
-                --primary: #f39200;
-                --text-dark: #2d2a26;
-                --border: #4a4a4a;
-            }
-            
-            body { 
-                font-family: 'Outfit', sans-serif; 
-                margin: 0; 
-                padding: 0;
-                background: #fdfaf6; 
-                color: var(--text-dark); 
-                display: flex;
-                justify-content: center;
-                align-items: center;
-            }
-            
-            .timetable-wrapper {
-                width: 960px; /* Increased width to provide more horizontal space for all 5 columns */
-                position: relative;
-                padding: 40px;
-                background: #fdfaf6;
-                box-sizing: border-box;
-                z-index: 1;
-                overflow: hidden;
-                margin: 0 auto;
-            }
+        // --- 2. TITLE SECTION ---
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(17);
+        doc.setTextColor(...NAVY);
+        const titleText = `WEEKLY SCHEDULE — ${config.week_label}`;
+        doc.text(titleText, 105, 45, { align: 'center' });
+        
+        doc.setFontSize(12);
+        doc.setTextColor(...ORANGE);
+        // Fix encoded ampersands if they exist from HTML
+        const cleanGrade = config.grade.replace(/&amp;/g, '&');
+        const gradeText = `${cleanGrade} — Sections ${config.batches}`;
+        doc.text(gradeText, 105, 52, { align: 'center' });
+        
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(...GREY_TEXT);
+        const today = new Date().toLocaleString('en-GB', { day:'numeric', month:'short', year:'numeric' });
+        doc.text(`Issued: ${today}`, 210 - MARGIN_R, 58, { align: 'right' });
 
-            /* Watermark Logo */
-            .timetable-wrapper::before {
-                content: '';
-                position: absolute;
-                top: 50%;
-                left: 50%;
-                transform: translate(-50%, -50%);
-                width: 600px;
-                height: 600px;
-                background-image: url('${logoBase64}');
-                background-repeat: no-repeat;
-                background-position: center;
-                background-size: contain;
-                opacity: 0.04;
-                z-index: -1;
-            }
+        // --- 3. SALUTATION & INTRO ---
+        let currentY = 65;
+        doc.setFontSize(10.5);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(...BLACK);
+        doc.text("Dear Parents / Guardians,", MARGIN_L, currentY);
+        currentY += 6;
 
-            .header-logo {
-                position: absolute;
-                top: 30px;
-                left: 30px;
-                width: 100px; 
-            }
+        doc.setFont("helvetica", "normal");
+        const introText = config.exam_school 
+            ? `Please find below the adjusted schedule for ${cleanGrade} during the upcoming ${config.exam_school} school examinations.`
+            : `Please find below the schedule for ${cleanGrade} (Sections ${config.batches}) for the week of ${config.week_label}. We request your support in ensuring punctual attendance for every session.`;
+        
+        const splitIntro = doc.splitTextToSize(introText, USABLE_W);
+        doc.text(splitIntro, MARGIN_L, currentY);
+        currentY += (splitIntro.length * 5) + 4;
 
-            .header-text { 
-                text-align: center; 
-                margin-top: 5px;
-                margin-bottom: 25px;
-            }
+        // --- 4. EXAM CALLOUT ---
+        if (config.exam_school) {
+            doc.setDrawColor(...ORANGE);
+            doc.setFillColor(...ORANGE_PALE);
+            doc.setLineWidth(0.35);
+            doc.rect(MARGIN_L, currentY, USABLE_W, 10, 'FD');
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(10.5);
+            doc.setTextColor(...ORANGE);
+            doc.text(`School Exam Adjustment — ${config.exam_school}, ${config.exam_dates}`, 105, currentY + 6.5, { align: 'center' });
+            currentY += 15;
+        }
 
-            .header-text h1 { 
-                font-size: 26px; 
-                margin: 0 0 5px 0; 
-                letter-spacing: 1px; 
-                font-weight: 700; 
-                color: var(--text-dark);
-                text-transform: uppercase; 
-            }
-
-            .header-text h2 { 
-                color: var(--primary); 
-                font-size: 18px; 
-                margin: 0 0 5px 0; 
-                font-weight: 700; 
-                letter-spacing: 0.5px; 
-                text-transform: uppercase;
-            }
-
-            .header-text h3 { 
-                color: #666; 
-                font-size: 16px; 
-                margin: 0; 
-                font-weight: 500; 
-                text-transform: uppercase;
-            }
-
-            .note-text {
-                font-size: 14px;
-                margin-bottom: 12px;
-                font-weight: 400;
-                color: #4a4a4a;
-            }
-
-            table { 
-                width: 100%; 
-                border-collapse: collapse; 
-                border: 2px solid var(--border);
-                background: transparent;
-            }
-            
-            th, td { 
-                padding: 12px 16px; 
-                text-align: center; 
-                border: 1px solid var(--border);
-                font-size: 15px;
-            }
-            
-            thead th { 
-                background-color: transparent;
-                position: relative;
-                color: var(--text-dark); 
-                font-weight: 700; 
-                text-transform: uppercase; 
-                border: 2px solid var(--border);
-                z-index: 1;
-            }
-            /* The image had a sort of brush stroke underlying the table heads. We simulate it cleanly with an inset background block that looks like a painted strip */
-            thead th::before {
-                content: '';
-                position: absolute;
-                top: 2px; bottom: 2px; left: 2px; right: 2px;
-                background-color: #f7b778;
-                opacity: 0.8;
-                z-index: -1;
-            }
-            
-            tbody tr { 
-                background-color: transparent; 
-            }
-            
-            .day-col { 
-                font-weight: 700; 
-                font-size: 16px; 
-                text-transform: uppercase;
-                width: 12%; /* Slightly reduced to give more to others */
-                vertical-align: middle;
-            }
-
-            .day-date {
-                display: block;
-                font-size: 12px;
-                color: #555;
-                font-weight: 400;
-                margin-top: 4px;
-            }
-
-            .time-col { 
-                font-weight: 500; 
-                width: 28%; 
-                white-space: nowrap; /* Strictly forbids wrapping */
-            }
-
-            .subj-col { 
-                font-weight: 700; 
-                width: 19%; 
-                text-transform: uppercase;
-            }
-
-            .topic-col { 
-                font-weight: 400; 
-                width: 21%; 
-            }
-            
-            .teacher-col { 
-                font-weight: 600; 
-                width: 20%; 
-                text-transform: uppercase;
-                white-space: nowrap; /* Strictly forbids wrapping */
-            }
-        `;
-
-        let rowsHTML = '';
-        dayKeys.forEach(day => {
-            const dayInfo = payload.timetable[day];
-            if (dayInfo.holiday || dayInfo.lectures.length === 0) return;
-
-            dayInfo.lectures.forEach((lec, idx) => {
-                rowsHTML += `<tr>`;
-                if (idx === 0) {
-                    rowsHTML += `<td class="day-col" rowspan="${dayInfo.lectures.length}">
-                        ${day} <br>
-                        <span class="day-date">(${parseFormatDate(dayInfo.date)})</span>
-                    </td>`;
-                }
-                rowsHTML += `<td class="time-col">${lec.time_from} to ${lec.time_to}</td>`;
-                rowsHTML += `<td class="subj-col">${lec.subject}</td>`;
-                rowsHTML += `<td class="topic-col">${lec.topic || ''}</td>`;
-                rowsHTML += `<td class="teacher-col">${lec.teacher}</td>`;
-                rowsHTML += `</tr>`;
-            });
+        // --- 5. TABLE ---
+        const DAY_ABBREV = { "Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu", "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun" };
+        
+        const tableBody = [];
+        let rowIdx = 0;
+        
+        // Group sessions by day
+        const dayGroups = {};
+        config.schedule.forEach((s, idx) => {
+            if (!dayGroups[s.day]) dayGroups[s.day] = [];
+            dayGroups[s.day].push({ ...s, origIdx: idx });
         });
 
-        if (rowsHTML === '') {
-            rowsHTML = `<tr><td colspan="4" style="text-align:center; padding: 30px; color: #7f8c8d;">No schedule available.</td></tr>`;
+        for (const day in dayGroups) {
+            const sessions = dayGroups[day];
+            sessions.forEach((s, i) => {
+                const row = [];
+                // Day and Date span vertically
+                if (i === 0) {
+                    row.push({ content: DAY_ABBREV[s.day] || s.day, rowSpan: sessions.length, styles: { fontStyle: 'bold', textColor: NAVY, fillColor: GREY_ROW, halign: 'center', valign: 'middle' } });
+                    
+                    // Format date (remove year to match python)
+                    let displayDate = s.date;
+                    if (displayDate) {
+                        const parts = displayDate.split('-');
+                        if (parts.length === 3) {
+                            const d = new Date(parts[2], parseInt(parts[1])-1, parts[0]);
+                            displayDate = `${d.getDate()} ${d.toLocaleString('en-US', {month:'short'})}`;
+                        }
+                    }
+                    row.push({ content: displayDate, rowSpan: sessions.length, styles: { textColor: GREY_TEXT, fillColor: GREY_ROW, halign: 'center', valign: 'middle' } });
+                }
+                
+                const isTest = config.test_row_indices.includes(s.origIdx);
+                const fillColor = isTest ? SUNSET_TINT : (rowIdx % 2 === 0 ? [255,255,255] : GREY_ROW);
+                const subjStyle = isTest ? 'bold' : 'normal';
+                
+                row.push({ content: s.time, styles: { textColor: GREY_TEXT, fillColor: fillColor, halign: 'center' } });
+                row.push({ content: s.subject, styles: { fontStyle: subjStyle, fillColor: fillColor, halign: 'left', textColor: BLACK } });
+                row.push({ content: s.chapter || '—', styles: { textColor: s.chapter ? BLACK : GREY_TEXT, fillColor: fillColor, halign: 'left' } });
+                row.push({ content: s.teacher || '—', styles: { textColor: s.teacher ? BLACK : GREY_TEXT, fillColor: fillColor, halign: 'left' } });
+                
+                tableBody.push(row);
+                rowIdx++;
+            });
         }
 
-        const tableHTML = `
-    <div class="timetable-wrapper">
-        <img class="header-logo" src="${logoBase64}" alt="Cocoon Logo">
-        
-        <div class="header-text">
-            <h1>COCOON GROUP TUITIONS</h1>
-            <h2>WEEKLY TIMETABLE</h2>
-            <h3>${subtitleText}</h3>
-        </div>
-        
-        <div class="note-text">Note: The following timetable is to be followed from <strong>${startDateStr} to ${endDateStr}</strong>.</div>
-        
-        <table>
-            <thead>
-                <tr>
-                    <th>DAY</th>
-                    <th>TIME</th>
-                    <th>SUBJECT</th>
-                    <th>TOPICS</th>
-                    <th>TEACHER</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${rowsHTML}
-            </tbody>
-        </table>
-    </div>`;
+        doc.autoTable({
+            startY: currentY,
+            head: [['Day', 'Date', 'Time', 'Subject', 'Chapter / Topic', 'Teacher']],
+            body: tableBody,
+            margin: { left: MARGIN_L, right: MARGIN_R },
+            theme: 'grid',
+            headStyles: { 
+                fillColor: NAVY, 
+                textColor: [255,255,255], 
+                fontStyle: 'bold',
+                lineColor: BORDER_GREY,
+                lineWidth: 0.1,
+                halign: 'center'
+            },
+            styles: { 
+                font: 'helvetica',
+                fontSize: 9.5, 
+                cellPadding: 2.5, 
+                valign: 'middle',
+                lineColor: BORDER_GREY,
+                lineWidth: 0.1
+            },
+            columnStyles: {
+                0: { cellWidth: 16 },
+                1: { cellWidth: 18 },
+                2: { cellWidth: 30 },
+                3: { cellWidth: 26, halign: 'left' },
+                4: { halign: 'left' }, // Flex width
+                5: { cellWidth: 26, halign: 'left' }
+            },
+            didParseCell: function(data) {
+                // Ensure header Subject/Chapter/Teacher align left
+                if (data.section === 'head' && [3,4,5].includes(data.column.index)) {
+                    data.cell.styles.halign = 'left';
+                }
+            }
+        });
 
-        return {
-            css: css,
-            body: tableHTML,
-            full: `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Timetable</title><style>${css}</style></head><body>${tableHTML}</body></html>`
-        };
+        currentY = doc.lastAutoTable.finalY + 4;
+
+        // --- 6. LEGEND ---
+        if (config.test_row_indices && config.test_row_indices.length > 0) {
+            doc.setDrawColor(...BORDER_GREY);
+            doc.setFillColor(...SUNSET_TINT);
+            doc.setLineWidth(0.1);
+            doc.rect(MARGIN_L, currentY, 6, 4, 'FD');
+            
+            doc.setFont("helvetica", "italic");
+            doc.setFontSize(8.5);
+            doc.setTextColor(...GREY_TEXT);
+            doc.text("Highlighted row indicates a Test session.", MARGIN_L + 8, currentY + 3.2);
+            currentY += 8;
+        }
+
+        currentY += 2;
+
+        // --- 7. NOTES BLOCK ---
+        if (config.notes && config.notes.length > 0) {
+            doc.setFontSize(10);
+            doc.setFont("helvetica", "bold");
+            doc.setTextColor(...NAVY);
+            doc.text("Notes", MARGIN_L, currentY);
+            currentY += 4;
+
+            // Calculate notes box height
+            doc.setFont("helvetica", "normal");
+            doc.setFontSize(9.5);
+            let notesHeight = 6; // padding top + bottom
+            const noteLines = [];
+            config.notes.forEach(note => {
+                const splitNote = doc.splitTextToSize(`•  ${note}`, USABLE_W - 8);
+                noteLines.push(splitNote);
+                notesHeight += (splitNote.length * 4.5) + 1;
+            });
+
+            doc.setFillColor(...ORANGE_PALE);
+            doc.setDrawColor(...ORANGE);
+            doc.setLineWidth(0.8);
+            // Draw background
+            doc.rect(MARGIN_L, currentY, USABLE_W, notesHeight, 'F');
+            // Draw left border
+            doc.line(MARGIN_L, currentY, MARGIN_L, currentY + notesHeight);
+
+            let noteY = currentY + 5;
+            doc.setTextColor(...BLACK);
+            noteLines.forEach(lines => {
+                doc.text(lines, MARGIN_L + 4, noteY);
+                noteY += (lines.length * 4.5) + 1;
+            });
+
+            currentY += notesHeight + 6;
+        } else {
+            currentY += 4;
+        }
+
+        // --- 8. CLOSING & SIGN-OFF ---
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(10);
+        doc.setTextColor(...GREY_TEXT);
+        const closingText = "For any clarifications, please reach out to us. We look forward to a productive week ahead with our students.";
+        const splitClosing = doc.splitTextToSize(closingText, USABLE_W);
+        doc.text(splitClosing, MARGIN_L, currentY);
+        currentY += (splitClosing.length * 5) + 4;
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(10.5);
+        doc.setTextColor(...BLACK);
+        doc.text("With warm regards,", MARGIN_L, currentY);
+        currentY += 5;
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(11);
+        doc.setTextColor(...NAVY);
+        doc.text("Cocoon Group Tuition, Airoli", MARGIN_L, currentY);
+
+        // --- 9. FOOTER (ON EVERY PAGE) ---
+        const pageCount = doc.internal.getNumberOfPages();
+        for (let i = 1; i <= pageCount; i++) {
+            doc.setPage(i);
+            const footerY = 297 - 16 - 6; // A4 height - Bottom Margin - offset
+            
+            doc.setDrawColor(...ORANGE);
+            doc.setLineWidth(0.5);
+            doc.line(MARGIN_L, footerY + 4, 210 - MARGIN_R, footerY + 4);
+            
+            doc.setFont("helvetica", "normal");
+            doc.setFontSize(7.5);
+            doc.setTextColor(...GREY_TEXT);
+            doc.text("Cocoon Group Tuition, Airoli, Navi Mumbai", MARGIN_L, footerY);
+            doc.text(`Page ${i}`, 210 - MARGIN_R, footerY, { align: 'right' });
+        }
+
+        return doc.output('blob');
     }
 });
+

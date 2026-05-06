@@ -435,6 +435,96 @@ input:focus, select:focus {
     align-items: center;
 }
 
+/* Notes Section Styling */
+.note-input-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+    background: #fff3e8; /* Pale orange background */
+    border-left: 4px solid var(--primary-color);
+    padding: 10px;
+    border-radius: 8px;
+}
+
+.note-input-row input {
+    flex-grow: 1;
+    border: none;
+    background: transparent;
+    font-size: 0.95rem;
+    padding: 8px;
+    outline: none;
+}
+
+.note-input-row input:focus {
+    box-shadow: none;
+}
+
+.remove-note-btn {
+    background: transparent;
+    border: none;
+    color: var(--error-color);
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 0 10px;
+}
+
+.add-note-btn {
+    background: rgba(243, 146, 0, 0.1);
+    color: var(--primary-color);
+    border: 1px dashed var(--primary-color);
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.add-note-btn:hover {
+    background: rgba(243, 146, 0, 0.2);
+}
+
+.note-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.note-row input {
+    flex: 1;
+    padding: 10px 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    font-family: var(--font-family);
+    font-size: 0.95rem;
+}
+
+.remove-note-btn {
+    background: var(--error-color);
+    color: white;
+    border: none;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: opacity 0.2s;
+}
+
+.remove-note-btn:hover {
+    opacity: 0.8;
+}
+
+.test-group label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
 @media (max-width: 768px) {
     .grid-row { grid-template-columns: 1fr; }
     .lecture-grid { grid-template-columns: 1fr; gap: 10px; }
