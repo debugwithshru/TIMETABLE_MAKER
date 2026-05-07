@@ -29,19 +29,16 @@
                         <input type="text" id="made_by" name="made_by" placeholder="Enter your name" required>
                     </div>
                     <div class="input-group">
-                        <label>Grade <span class="required">*</span></label>
-                        <div class="radio-group">
-                            <label class="radio-label"><input type="radio" name="grade" value="9" required> Grade 9</label>
-                            <label class="radio-label"><input type="radio" name="grade" value="10"> Grade 10</label>
-                        </div>
+                        <label for="made_by_email">Email <span class="required">*</span></label>
+                        <input type="email" id="made_by_email" name="made_by_email" placeholder="Enter your email" required>
                     </div>
                 </div>
                 <div class="grid-row">
                     <div class="input-group">
-                        <label>Batch <span class="required">*</span></label>
-                        <div class="checkbox-group">
-                            <label class="check-label"><input type="checkbox" name="batch" value="A"> A</label>
-                            <label class="check-label"><input type="checkbox" name="batch" value="B"> B</label>
+                        <label>Grade <span class="required">*</span></label>
+                        <div class="radio-group">
+                            <label class="radio-label"><input type="radio" name="grade" value="9" required> Grade 9</label>
+                            <label class="radio-label"><input type="radio" name="grade" value="10"> Grade 10</label>
                         </div>
                     </div>
                     <div class="input-group">
@@ -54,7 +51,14 @@
                     </div>
                 </div>
                 <div class="grid-row">
-                    <div class="input-group" style="grid-column: span 2;">
+                    <div class="input-group">
+                        <label>Batch <span class="required">*</span></label>
+                        <div class="checkbox-group">
+                            <label class="check-label"><input type="checkbox" name="batch" value="A"> A</label>
+                            <label class="check-label"><input type="checkbox" name="batch" value="B"> B</label>
+                        </div>
+                    </div>
+                    <div class="input-group">
                         <label>Schedule Type <span class="required">*</span></label>
                         <div class="radio-group">
                             <label class="radio-label"><input type="radio" name="schedule_type" value="Weekly" checked> Weekly Schedule</label>

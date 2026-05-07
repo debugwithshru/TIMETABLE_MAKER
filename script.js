@@ -424,6 +424,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 submission_date: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })
             }));
             submitData.append('made_by', formData.get('made_by'));
+            submitData.append('made_by_email', formData.get('made_by_email'));
             submitData.append('grade', grade);
             submitData.append('batch', batchStr);
             submitData.append('branch', formData.get('branch'));
