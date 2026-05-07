@@ -422,6 +422,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 branch: formData.get('branch'),
                 submission_date: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })
             }));
+            submitData.append('made_by', formData.get('made_by'));
+            submitData.append('grade', grade);
+            submitData.append('batch', batchStr);
+            submitData.append('branch', formData.get('branch'));
+            submitData.append('submission_date', new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }));
+            submitData.append('timetable', JSON.stringify(timetableData));
 
             btn.textContent = 'Submitting...';
 
@@ -563,11 +569,8 @@ document.addEventListener('DOMContentLoaded', () => {
             currentY += 15;
         }
 
-        // --- 5. TABLE ---
+        // --- 5. TABLE (WITH CHUNKING FOR PAGE BREAKS) ---
         const DAY_ABBREV = { "Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu", "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun" };
-        
-        const tableBody = [];
-        let rowIdx = 0;
         
         // Group sessions by day
         const dayGroups = {};
@@ -576,15 +579,27 @@ document.addEventListener('DOMContentLoaded', () => {
             dayGroups[s.day].push({ ...s, origIdx: idx });
         });
 
+        const tableChunks = [];
+        let currentChunk = [];
+        let currentChunkSize = 0;
+        const MAX_LECTURES_PER_PAGE = 10;
+        let rowIdx = 0;
+
         for (const day in dayGroups) {
             const sessions = dayGroups[day];
+            
+            // If adding this day exceeds limits and we already have rows, push to next chunk to avoid splitting days
+            if (currentChunkSize + sessions.length > MAX_LECTURES_PER_PAGE && currentChunkSize > 0) {
+                tableChunks.push(currentChunk);
+                currentChunk = [];
+                currentChunkSize = 0;
+            }
+            
             sessions.forEach((s, i) => {
                 const row = [];
-                // Day and Date span vertically
                 if (i === 0) {
                     row.push({ content: DAY_ABBREV[s.day] || s.day, rowSpan: sessions.length, styles: { fontStyle: 'bold', textColor: NAVY, fillColor: GREY_ROW, halign: 'center', valign: 'middle' } });
                     
-                    // Format date (remove year to match python)
                     let displayDate = s.date;
                     if (displayDate) {
                         const parts = displayDate.split('-');
@@ -605,50 +620,65 @@ document.addEventListener('DOMContentLoaded', () => {
                 row.push({ content: s.chapter || '—', styles: { textColor: s.chapter ? BLACK : GREY_TEXT, fillColor: fillColor, halign: 'left' } });
                 row.push({ content: s.teacher || '—', styles: { textColor: s.teacher ? BLACK : GREY_TEXT, fillColor: fillColor, halign: 'left' } });
                 
-                tableBody.push(row);
+                currentChunk.push(row);
                 rowIdx++;
             });
+            currentChunkSize += sessions.length;
+        }
+        if (currentChunk.length > 0) {
+            tableChunks.push(currentChunk);
         }
 
-        doc.autoTable({
-            startY: currentY,
-            head: [['Day', 'Date', 'Time', 'Subject', 'Chapter / Topic', 'Teacher']],
-            body: tableBody,
-            margin: { left: MARGIN_L, right: MARGIN_R },
-            theme: 'grid',
-            headStyles: { 
-                fillColor: NAVY, 
-                textColor: [255,255,255], 
-                fontStyle: 'bold',
-                lineColor: BORDER_GREY,
-                lineWidth: 0.1,
-                halign: 'center'
-            },
-            styles: { 
-                font: 'helvetica',
-                fontSize: 9.5, 
-                cellPadding: 2.5, 
-                valign: 'middle',
-                lineColor: BORDER_GREY,
-                lineWidth: 0.1
-            },
-            columnStyles: {
-                0: { cellWidth: 16 },
-                1: { cellWidth: 18 },
-                2: { cellWidth: 30 },
-                3: { cellWidth: 26, halign: 'left' },
-                4: { halign: 'left' }, // Flex width
-                5: { cellWidth: 26, halign: 'left' }
-            },
-            didParseCell: function(data) {
-                // Ensure header Subject/Chapter/Teacher align left
-                if (data.section === 'head' && [3,4,5].includes(data.column.index)) {
-                    data.cell.styles.halign = 'left';
-                }
+        tableChunks.forEach((chunk, index) => {
+            if (index > 0) {
+                doc.addPage();
+                currentY = 20; // reset Y for new page
             }
+            
+            doc.autoTable({
+                startY: currentY,
+                head: [['Day', 'Date', 'Time', 'Subject', 'Chapter / Topic', 'Teacher']],
+                body: chunk,
+                margin: { left: MARGIN_L, right: MARGIN_R },
+                theme: 'grid',
+                headStyles: { 
+                    fillColor: NAVY, 
+                    textColor: [255,255,255], 
+                    fontStyle: 'bold',
+                    lineColor: BORDER_GREY,
+                    lineWidth: 0.1,
+                    halign: 'center'
+                },
+                styles: { 
+                    font: 'helvetica',
+                    fontSize: 9.5, 
+                    cellPadding: 2.5, 
+                    valign: 'middle',
+                    lineColor: BORDER_GREY,
+                    lineWidth: 0.1
+                },
+                columnStyles: {
+                    0: { cellWidth: 16 },
+                    1: { cellWidth: 18 },
+                    2: { cellWidth: 30 },
+                    3: { cellWidth: 26, halign: 'left' },
+                    4: { halign: 'left' }, // Flex width
+                    5: { cellWidth: 26, halign: 'left' }
+                },
+                didParseCell: function(data) {
+                    if (data.section === 'head' && [3,4,5].includes(data.column.index)) {
+                        data.cell.styles.halign = 'left';
+                    }
+                }
+            });
+            currentY = doc.lastAutoTable.finalY + 4;
         });
 
-        currentY = doc.lastAutoTable.finalY + 4;
+        // Ensure there is enough space for Legend, Notes, and Closing (Approx 70mm needed)
+        if (currentY > 210) {
+            doc.addPage();
+            currentY = 20;
+        }
 
         // --- 6. LEGEND ---
         if (config.test_row_indices && config.test_row_indices.length > 0) {
