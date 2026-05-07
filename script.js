@@ -13,7 +13,8 @@ document.addEventListener('DOMContentLoaded', () => {
     
     const teachers = [
         "Suraj Sir", "Ranjeet Sir", "Dipti Ma'am", "Rachna Ma'am", 
-        "Trupti Ma'am", "Prasad Sir", "Mana Ma'am", "Dr. Monish"
+        "Trupti Ma'am", "Prasad Sir", "Mana Ma'am", "Dr. Monish",
+        "Ayaan Sir", "Deepa Ma'am"
     ];
 
     const subjectsDb = {
@@ -500,7 +501,7 @@ document.addEventListener('DOMContentLoaded', () => {
             doc.addImage(logoDataUrl, 'PNG', MARGIN_L, 14, 18, 20);
         }
         
-        doc.setFont("helvetica", "bold");
+        doc.setFont("times", "bold");
         doc.setFontSize(13);
         doc.setTextColor(...ORANGE);
         doc.text("COCOON", 40, 19);
@@ -509,7 +510,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const cocoonWidth = doc.getTextWidth("COCOON");
         doc.text(" GROUP TUITION", 40 + cocoonWidth, 19);
         
-        doc.setFont("helvetica", "italic");
+        doc.setFont("times", "italic");
         doc.setFontSize(7.5);
         doc.setTextColor(...GREY_TEXT);
         doc.text("A Tutorial to Transform Your Child", 40, 24);
@@ -520,7 +521,7 @@ document.addEventListener('DOMContentLoaded', () => {
         doc.line(MARGIN_L, 36, 210 - MARGIN_R, 36);
 
         // --- 2. TITLE SECTION ---
-        doc.setFont("helvetica", "bold");
+        doc.setFont("times", "bold");
         doc.setFontSize(17);
         doc.setTextColor(...NAVY);
         const titleText = `WEEKLY SCHEDULE — ${config.week_label}`;
@@ -530,11 +531,11 @@ document.addEventListener('DOMContentLoaded', () => {
         doc.setTextColor(...ORANGE);
         // Fix encoded ampersands if they exist from HTML
         const cleanGrade = config.grade.replace(/&amp;/g, '&');
-        const gradeText = `${cleanGrade} — Sections ${config.batches}`;
+        const gradeText = `Class ${cleanGrade} — Sections ${config.batches}`;
         doc.text(gradeText, 105, 52, { align: 'center' });
         
         doc.setFontSize(9);
-        doc.setFont("helvetica", "normal");
+        doc.setFont("times", "normal");
         doc.setTextColor(...GREY_TEXT);
         const today = new Date().toLocaleString('en-GB', { day:'numeric', month:'short', year:'numeric' });
         doc.text(`Issued: ${today}`, 210 - MARGIN_R, 58, { align: 'right' });
@@ -542,15 +543,15 @@ document.addEventListener('DOMContentLoaded', () => {
         // --- 3. SALUTATION & INTRO ---
         let currentY = 65;
         doc.setFontSize(10.5);
-        doc.setFont("helvetica", "bold");
+        doc.setFont("times", "bold");
         doc.setTextColor(...BLACK);
         doc.text("Dear Parents / Guardians,", MARGIN_L, currentY);
         currentY += 6;
 
-        doc.setFont("helvetica", "normal");
+        doc.setFont("times", "normal");
         const introText = config.exam_school 
-            ? `Please find below the adjusted schedule for ${cleanGrade} during the upcoming ${config.exam_school} school examinations.`
-            : `Please find below the schedule for ${cleanGrade} (Sections ${config.batches}) for the week of ${config.week_label}. We request your support in ensuring punctual attendance for every session.`;
+            ? `Please find below the adjusted schedule for Class ${cleanGrade} during the upcoming ${config.exam_school} school examinations.`
+            : `Please find below the schedule for Class ${cleanGrade} (Sections ${config.batches}) for the week of ${config.week_label}. We request your support in ensuring punctual attendance for every session.`;
         
         const splitIntro = doc.splitTextToSize(introText, USABLE_W);
         doc.text(splitIntro, MARGIN_L, currentY);
@@ -562,7 +563,7 @@ document.addEventListener('DOMContentLoaded', () => {
             doc.setFillColor(...ORANGE_PALE);
             doc.setLineWidth(0.35);
             doc.rect(MARGIN_L, currentY, USABLE_W, 10, 'FD');
-            doc.setFont("helvetica", "bold");
+            doc.setFont("times", "bold");
             doc.setFontSize(10.5);
             doc.setTextColor(...ORANGE);
             doc.text(`School Exam Adjustment — ${config.exam_school}, ${config.exam_dates}`, 105, currentY + 6.5, { align: 'center' });
@@ -650,7 +651,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     halign: 'center'
                 },
                 styles: { 
-                    font: 'helvetica',
+                    font: 'times',
                     fontSize: 9.5, 
                     cellPadding: 2.5, 
                     valign: 'middle',
@@ -687,7 +688,7 @@ document.addEventListener('DOMContentLoaded', () => {
             doc.setLineWidth(0.1);
             doc.rect(MARGIN_L, currentY, 6, 4, 'FD');
             
-            doc.setFont("helvetica", "italic");
+            doc.setFont("times", "italic");
             doc.setFontSize(8.5);
             doc.setTextColor(...GREY_TEXT);
             doc.text("Highlighted row indicates a Test session.", MARGIN_L + 8, currentY + 3.2);
@@ -699,13 +700,13 @@ document.addEventListener('DOMContentLoaded', () => {
         // --- 7. NOTES BLOCK ---
         if (config.notes && config.notes.length > 0) {
             doc.setFontSize(10);
-            doc.setFont("helvetica", "bold");
+            doc.setFont("times", "bold");
             doc.setTextColor(...NAVY);
             doc.text("Notes", MARGIN_L, currentY);
             currentY += 4;
 
             // Calculate notes box height
-            doc.setFont("helvetica", "normal");
+            doc.setFont("times", "normal");
             doc.setFontSize(9.5);
             let notesHeight = 6; // padding top + bottom
             const noteLines = [];
@@ -736,7 +737,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // --- 8. CLOSING & SIGN-OFF ---
-        doc.setFont("helvetica", "normal");
+        doc.setFont("times", "normal");
         doc.setFontSize(10);
         doc.setTextColor(...GREY_TEXT);
         const closingText = "For any clarifications, please reach out to us. We look forward to a productive week ahead with our students.";
@@ -744,13 +745,13 @@ document.addEventListener('DOMContentLoaded', () => {
         doc.text(splitClosing, MARGIN_L, currentY);
         currentY += (splitClosing.length * 5) + 4;
 
-        doc.setFont("helvetica", "normal");
+        doc.setFont("times", "normal");
         doc.setFontSize(10.5);
         doc.setTextColor(...BLACK);
         doc.text("With warm regards,", MARGIN_L, currentY);
         currentY += 5;
 
-        doc.setFont("helvetica", "bold");
+        doc.setFont("times", "bold");
         doc.setFontSize(11);
         doc.setTextColor(...NAVY);
         doc.text("Cocoon Group Tuition, Airoli", MARGIN_L, currentY);
@@ -765,7 +766,7 @@ document.addEventListener('DOMContentLoaded', () => {
             doc.setLineWidth(0.5);
             doc.line(MARGIN_L, footerY + 4, 210 - MARGIN_R, footerY + 4);
             
-            doc.setFont("helvetica", "normal");
+            doc.setFont("times", "normal");
             doc.setFontSize(7.5);
             doc.setTextColor(...GREY_TEXT);
             doc.text("Cocoon Group Tuition, Airoli, Navi Mumbai", MARGIN_L, footerY);
