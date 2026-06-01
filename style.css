@@ -526,6 +526,11 @@ input:focus, select:focus {
 }
 
 @media (max-width: 768px) {
-    .grid-row { grid-template-columns: 1fr; }
-    .lecture-grid { grid-template-columns: 1fr; gap: 10px; }
+    body { padding: 15px 10px; }
+    .form-container { padding: 25px 15px; }
+    .lecture-block { padding: 15px 12px; }
+    .grid-row { grid-template-columns: 1fr; gap: 15px; }
+    .lecture-grid { grid-template-columns: 1fr; gap: 15px; }
+    .lecture-grid > .input-group:nth-child(n) { grid-column: span 1; }
+    .radio-group, .checkbox-group { gap: 15px; }
 }
