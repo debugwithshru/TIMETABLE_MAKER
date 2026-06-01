@@ -155,25 +155,16 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // 4. Setup Custom Subject Dropdown & Teachers Select
+    // 4. Setup Custom Subject & Teacher Dropdowns
     function setupLectureDropdowns(lectureElement, dayLower, lectureNum) {
-        // Populate Teachers
-        const teacherSelect = lectureElement.querySelector(`select[name="teacher_${dayLower}_${lectureNum}"]`);
-        teachers.forEach(teacher => {
-            const opt = document.createElement('option');
-            opt.value = teacher;
-            opt.textContent = teacher;
-            teacherSelect.appendChild(opt);
-        });
-
         // Setup Searchable Subject
-        const searchInput = lectureElement.querySelector('.subject-search');
-        const hiddenInput = lectureElement.querySelector(`input[name="subject_${dayLower}_${lectureNum}"]`);
-        const dropdownList = lectureElement.querySelector('.subject-list');
-        const searchContainer = lectureElement.querySelector('.searchable-dropdown');
+        const subjectSearchInput = lectureElement.querySelector('.subject-search');
+        const subjectHiddenInput = lectureElement.querySelector(`input[name="subject_${dayLower}_${lectureNum}"]`);
+        const subjectDropdownList = lectureElement.querySelector('.subject-list');
+        const subjectSearchContainer = lectureElement.querySelector('.subject-search').parentElement;
 
         function renderSubjects(query = "") {
-            dropdownList.innerHTML = '';
+            subjectDropdownList.innerHTML = '';
             let currentCategory = '';
             
             const filtered = allSubjectsForSearch.filter(sub => 
@@ -182,7 +173,7 @@ document.addEventListener('DOMContentLoaded', () => {
             );
 
             if (filtered.length === 0) {
-                dropdownList.innerHTML = '<div class="dropdown-item no-results">No subjects found.</div>';
+                subjectDropdownList.innerHTML = '<div class="dropdown-item no-results">No subjects found.</div>';
                 return;
             }
 
@@ -191,7 +182,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const catDiv = document.createElement('div');
                     catDiv.className = 'dropdown-category';
                     catDiv.textContent = sub.category;
-                    dropdownList.appendChild(catDiv);
+                    subjectDropdownList.appendChild(catDiv);
                     currentCategory = sub.category;
                 }
 
@@ -201,38 +192,94 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 itemDiv.onclick = (e) => {
                     e.preventDefault();
-                    searchInput.value = sub.name;
-                    hiddenInput.value = sub.name;
-                    dropdownList.classList.remove('active');
+                    subjectSearchInput.value = sub.name;
+                    subjectHiddenInput.value = sub.name;
+                    subjectDropdownList.classList.remove('active');
                 };
 
-                dropdownList.appendChild(itemDiv);
+                subjectDropdownList.appendChild(itemDiv);
             });
         }
 
-        searchInput.addEventListener('focus', () => {
-            dropdownList.classList.add('active');
-            renderSubjects(searchInput.value);
+        subjectSearchInput.addEventListener('focus', () => {
+            subjectDropdownList.classList.add('active');
+            renderSubjects(subjectSearchInput.value);
         });
 
-        searchInput.addEventListener('input', (e) => {
-            dropdownList.classList.add('active');
+        subjectSearchInput.addEventListener('input', (e) => {
+            subjectDropdownList.classList.add('active');
             renderSubjects(e.target.value);
-            hiddenInput.value = ''; // clear hidden if they type something new
+            subjectHiddenInput.value = ''; // clear hidden if they type something new
         });
 
-        // Close dropdown when clicked outside
+        // Setup Searchable Teacher
+        const teacherSearchInput = lectureElement.querySelector('.teacher-search');
+        const teacherHiddenInput = lectureElement.querySelector(`input[name="teacher_${dayLower}_${lectureNum}"]`);
+        const teacherDropdownList = lectureElement.querySelector('.teacher-list');
+        const teacherSearchContainer = lectureElement.querySelector('.teacher-search').parentElement;
+
+        function renderTeachers(query = "") {
+            teacherDropdownList.innerHTML = '';
+            
+            const filtered = teachers.filter(t => t.toLowerCase().includes(query.toLowerCase()));
+
+            if (filtered.length === 0) {
+                teacherDropdownList.innerHTML = '<div class="dropdown-item no-results">No teachers found.</div>';
+                return;
+            }
+
+            filtered.forEach(t => {
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'dropdown-item';
+                itemDiv.textContent = t;
+                
+                itemDiv.onclick = (e) => {
+                    e.preventDefault();
+                    teacherSearchInput.value = t;
+                    teacherHiddenInput.value = t;
+                    teacherDropdownList.classList.remove('active');
+                };
+
+                teacherDropdownList.appendChild(itemDiv);
+            });
+        }
+
+        teacherSearchInput.addEventListener('focus', () => {
+            teacherDropdownList.classList.add('active');
+            renderTeachers(teacherSearchInput.value);
+        });
+
+        teacherSearchInput.addEventListener('input', (e) => {
+            teacherDropdownList.classList.add('active');
+            renderTeachers(e.target.value);
+            teacherHiddenInput.value = ''; // clear hidden if they type something new
+        });
+
+        // Close dropdowns when clicked outside
         document.addEventListener('click', (e) => {
-            if (!searchContainer.contains(e.target)) {
-                dropdownList.classList.remove('active');
+            if (!subjectSearchContainer.contains(e.target)) {
+                subjectDropdownList.classList.remove('active');
                 // Auto correct if they didn't pick from list
-                if (searchInput.value && !hiddenInput.value) {
-                    const match = allSubjectsForSearch.find(s => s.name.toLowerCase() === searchInput.value.toLowerCase());
+                if (subjectSearchInput.value && !subjectHiddenInput.value) {
+                    const match = allSubjectsForSearch.find(s => s.name.toLowerCase() === subjectSearchInput.value.toLowerCase());
                     if (match) {
-                        searchInput.value = match.name;
-                        hiddenInput.value = match.name;
+                        subjectSearchInput.value = match.name;
+                        subjectHiddenInput.value = match.name;
                     } else {
-                        searchInput.value = '';
+                        subjectSearchInput.value = '';
+                    }
+                }
+            }
+            if (!teacherSearchContainer.contains(e.target)) {
+                teacherDropdownList.classList.remove('active');
+                // Auto correct if they didn't pick from list
+                if (teacherSearchInput.value && !teacherHiddenInput.value) {
+                    const match = teachers.find(t => t.toLowerCase() === teacherSearchInput.value.toLowerCase());
+                    if (match) {
+                        teacherSearchInput.value = match;
+                        teacherHiddenInput.value = match;
+                    } else {
+                        teacherSearchInput.value = '';
                     }
                 }
             }

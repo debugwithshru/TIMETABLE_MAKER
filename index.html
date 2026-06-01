@@ -197,12 +197,13 @@
                     <label>Topic Name</label>
                     <input type="text" name="topic_{day}_{lectureNum}" placeholder="e.g. Linear Equations">
                 </div>
-                <div class="input-group">
+                <div class="input-group searchable-dropdown-container">
                     <label>Teacher <span class="required">*</span></label>
-                    <select name="teacher_{day}_{lectureNum}" required>
-                        <option value="" disabled selected>Select Teacher</option>
-                        <!-- Teachers populated via JS -->
-                    </select>
+                    <div class="searchable-dropdown">
+                        <input type="text" class="teacher-search" placeholder="Search Teacher..." autocomplete="off">
+                        <div class="dropdown-list teacher-list"></div>
+                        <input type="hidden" name="teacher_{day}_{lectureNum}" required>
+                    </div>
                 </div>
                 <div class="input-group test-group">
                     <label>Test Session?</label>
