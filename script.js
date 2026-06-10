@@ -34,6 +34,52 @@ document.addEventListener('DOMContentLoaded', () => {
     // e.g. "1_from": "10:00", "2_to": "12:00"
     const globalLectureTimes = {};
 
+    let allChapters = [];
+    async function fetchChapters() {
+        try {
+            const data = await new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                const cbName = 'gvizCallbackCh_' + Math.floor(Math.random() * 100000);
+                window[cbName] = (jsonData) => {
+                    delete window[cbName];
+                    script.remove();
+                    resolve(jsonData);
+                };
+                script.onerror = () => {
+                    delete window[cbName];
+                    script.remove();
+                    reject(new Error('Failed to load Google Sheet Chapters'));
+                };
+                const SHEET_ID = '16JAViFIXgf0oDqC5Nl0V6UpGqKrUVGAHkoEeYw1LdGs';
+                const GID_CHAPTERS = '1066495436';
+                script.src = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json;responseHandler:${cbName}&gid=${GID_CHAPTERS}`;
+                document.body.appendChild(script);
+            });
+
+            const gradeIdx = 2;
+            const subjectIdx = 3;
+            const subSubjectIdx = 4;
+            const codeIdx = 6;
+            const nameIdx = 7;
+
+            const rows = data.table.rows;
+            allChapters = rows.map(row => {
+                const c = row.c;
+                if (!c || !c[nameIdx] || !c[nameIdx].v) return null;
+                return {
+                    grade: (c[gradeIdx] && c[gradeIdx].v) ? String(c[gradeIdx].v).trim() : '',
+                    subject: (c[subjectIdx] && c[subjectIdx].v) ? String(c[subjectIdx].v).trim() : '',
+                    subSubject: (c[subSubjectIdx] && c[subSubjectIdx].v) ? String(c[subSubjectIdx].v).trim() : '',
+                    code: (c[codeIdx] && c[codeIdx].v) ? String(c[codeIdx].v).trim() : 'MANUAL',
+                    name: String(c[nameIdx].v).trim()
+                };
+            }).filter(ch => ch !== null && !ch.name.toLowerCase().includes('chapter_name') && ch.name !== '');
+        } catch (error) {
+            console.error('Chapter fetch error:', error);
+        }
+    }
+    fetchChapters();
+
     // 0. Setup UI Toggles (Exam Notice & Notes)
     scheduleTypeRadios.forEach(radio => {
         radio.addEventListener('change', (e) => {
@@ -194,6 +240,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     e.preventDefault();
                     subjectSearchInput.value = sub.name;
                     subjectHiddenInput.value = sub.name;
+                    subjectHiddenInput.dispatchEvent(new Event('change'));
                     subjectDropdownList.classList.remove('active');
                 };
 
@@ -210,6 +257,7 @@ document.addEventListener('DOMContentLoaded', () => {
             subjectDropdownList.classList.add('active');
             renderSubjects(e.target.value);
             subjectHiddenInput.value = ''; // clear hidden if they type something new
+            subjectHiddenInput.dispatchEvent(new Event('change'));
         });
 
         // Setup Searchable Teacher
@@ -265,6 +313,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (match) {
                         subjectSearchInput.value = match.name;
                         subjectHiddenInput.value = match.name;
+                        subjectHiddenInput.dispatchEvent(new Event('change'));
                     } else {
                         subjectSearchInput.value = '';
                     }
@@ -284,6 +333,110 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
         });
+
+        // Setup Searchable Topic/Chapter
+        const topicContainer = lectureElement.querySelector('.topic-container');
+        const topicDropdownWrapper = topicContainer.querySelector('.chapter-search-dropdown');
+        const topicSearchInput = topicContainer.querySelector('.topic-search');
+        const topicList = topicContainer.querySelector('.topic-list');
+        const topicManualInput = topicContainer.querySelector('.topic-manual-input');
+        const topicHiddenInput = topicContainer.querySelector('.topic-hidden');
+
+        // Sync inputs to hidden
+        topicManualInput.addEventListener('input', (e) => {
+            topicHiddenInput.value = e.target.value;
+        });
+
+        function getAvailableChapters() {
+            const subject = subjectHiddenInput.value;
+            const gradeRadio = document.querySelector('input[name="grade"]:checked');
+            const gradeStr = gradeRadio ? `${gradeRadio.value}th` : '';
+
+            if (!subject) return [];
+
+            return allChapters.filter(ch => {
+                if (ch.grade.toLowerCase() !== gradeStr.toLowerCase()) return false;
+                
+                const langSubjects = ["Hindi", "Marathi", "Sanskrit", "English"];
+                if (langSubjects.includes(subject)) {
+                    return ch.subject.toLowerCase() === subject.toLowerCase();
+                } else {
+                    return ch.subSubject.toLowerCase() === subject.toLowerCase();
+                }
+            });
+        }
+
+        function renderTopics(query = "") {
+            topicList.innerHTML = '';
+            
+            const available = getAvailableChapters();
+            const filtered = available.filter(ch => 
+                ch.name.toLowerCase().includes(query.toLowerCase()) || 
+                ch.code.toLowerCase().includes(query.toLowerCase())
+            );
+
+            filtered.forEach(ch => {
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'dropdown-item';
+                itemDiv.innerHTML = `${ch.name} <span style="color:#00b894;font-size:0.8rem;margin-left:4px;">(${ch.code})</span>`;
+                
+                itemDiv.onclick = (e) => {
+                    e.preventDefault();
+                    topicSearchInput.value = ch.name;
+                    topicHiddenInput.value = ch.name;
+                    topicList.classList.remove('active');
+                };
+
+                topicList.appendChild(itemDiv);
+            });
+
+            // "Other" Option
+            const otherDiv = document.createElement('div');
+            otherDiv.className = 'dropdown-item';
+            otherDiv.style.fontWeight = 'bold';
+            otherDiv.textContent = 'Other (Type manually)';
+            otherDiv.onclick = (e) => {
+                e.preventDefault();
+                topicDropdownWrapper.style.display = 'none';
+                topicManualInput.style.display = 'block';
+                topicManualInput.focus();
+                topicSearchInput.value = '';
+                topicList.classList.remove('active');
+            };
+            topicList.appendChild(otherDiv);
+        }
+
+        subjectHiddenInput.addEventListener('change', () => {
+            const chapters = getAvailableChapters();
+            if (chapters.length > 0) {
+                topicDropdownWrapper.style.display = 'block';
+                topicManualInput.style.display = 'none';
+            } else {
+                topicDropdownWrapper.style.display = 'none';
+                topicManualInput.style.display = 'block';
+            }
+            // Reset fields
+            topicSearchInput.value = '';
+            topicManualInput.value = '';
+            topicHiddenInput.value = '';
+        });
+
+        topicSearchInput.addEventListener('focus', () => {
+            topicList.classList.add('active');
+            renderTopics(topicSearchInput.value);
+        });
+
+        topicSearchInput.addEventListener('input', (e) => {
+            topicList.classList.add('active');
+            renderTopics(e.target.value);
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!topicDropdownWrapper.contains(e.target)) {
+                topicList.classList.remove('active');
+            }
+        });
+
     }
 
     // 5. Cross-Day Lecture Timing Sync (Custom Inputs)

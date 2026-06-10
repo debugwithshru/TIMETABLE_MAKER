@@ -193,9 +193,14 @@
                         <input type="hidden" name="subject_{day}_{lectureNum}" required>
                     </div>
                 </div>
-                <div class="input-group">
+                <div class="input-group topic-container">
                     <label>Topic Name</label>
-                    <input type="text" name="topic_{day}_{lectureNum}" placeholder="e.g. Linear Equations">
+                    <div class="searchable-dropdown chapter-search-dropdown" style="display: none;">
+                        <input type="text" class="topic-search" placeholder="Search Chapter..." autocomplete="off">
+                        <div class="dropdown-list topic-list"></div>
+                    </div>
+                    <input type="text" class="topic-manual-input" placeholder="e.g. Linear Equations">
+                    <input type="hidden" class="topic-hidden" name="topic_{day}_{lectureNum}">
                 </div>
                 <div class="input-group searchable-dropdown-container">
                     <label>Teacher <span class="required">*</span></label>
