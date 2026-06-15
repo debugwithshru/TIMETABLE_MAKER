@@ -953,31 +953,35 @@ document.addEventListener('DOMContentLoaded', () => {
                                 if (w > maxW) maxW = w;
                             });
                             
-                            canvas.width = Math.max(maxW, 1);
-                            canvas.height = lines.length * (fontSizePx * 1.4); 
+                            const topOffset = fontSizePx * 0.3; // 30% padding for Devanagari upper matras
+                            const sideOffset = fontSizePx * 0.1; // 10% padding for horizontal overhangs
+                            
+                            canvas.width = Math.max(maxW, 1) + (sideOffset * 2);
+                            canvas.height = lines.length * (fontSizePx * 1.35) + topOffset + (fontSizePx * 0.2); 
                             
                             ctx.font = `${fontSizePx}px sans-serif`;
                             ctx.textBaseline = 'top';
                             ctx.fillStyle = '#1A1A1A';
                             
                             lines.forEach((line, i) => {
-                                ctx.fillText(line, 0, i * (fontSizePx * 1.15) + (1 * scale));
+                                ctx.fillText(line, sideOffset, i * (fontSizePx * 1.35) + topOffset);
                             });
                             
                             const imgData = canvas.toDataURL('image/png');
-                            const pdfX = data.cell.x + data.cell.padding('left');
-                            const pdfY = data.cell.y + data.cell.padding('top');
                             const mm2pt = 2.83465;
+                            
+                            const pdfX = data.cell.x + data.cell.padding('left') - (sideOffset / scale / mm2pt);
+                            const pdfY = data.cell.y + data.cell.padding('top') - (topOffset / scale / mm2pt);
                             
                             let pdfW = (canvas.width / scale) / mm2pt;
                             let pdfH = (canvas.height / scale) / mm2pt;
                             
-                            // Prevent crossing cell boundaries if native font is wider than expected
-                            const availableW = data.cell.width - data.cell.padding('left') - data.cell.padding('right');
+                            // Prevent crossing cell boundaries
+                            const availableW = data.cell.width - data.cell.padding('left') - data.cell.padding('right') + ((sideOffset * 2) / scale / mm2pt);
                             if (pdfW > availableW) {
                                 const shrinkRatio = availableW / pdfW;
                                 pdfW = availableW;
-                                pdfH = pdfH * shrinkRatio; // maintain aspect ratio
+                                pdfH = pdfH * shrinkRatio;
                             }
                             
                             doc.addImage(imgData, 'PNG', pdfX, pdfY, pdfW, pdfH);
