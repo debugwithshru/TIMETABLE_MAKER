@@ -4,6 +4,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const lectureTemplate = document.getElementById('lectureTemplate').innerHTML;
     const form = document.getElementById('timetableForm');
 
+    // Prevent accidental form submission on Enter globally for all text inputs
+    form.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA' && e.target.type !== 'submit') {
+            e.preventDefault();
+        }
+    });
+
     const notesContainer = document.getElementById('notesContainer');
     const addNoteBtn = document.getElementById('addNoteBtn');
     const examNoticeFields = document.getElementById('examNoticeFields');
@@ -334,7 +341,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        // Setup Searchable Topic/Chapter
+        // Setup Searchable Topic/Chapter (Multi-Select)
         const topicContainer = lectureElement.querySelector('.topic-container');
         const topicDropdownWrapper = topicContainer.querySelector('.chapter-search-dropdown');
         const topicSearchInput = topicContainer.querySelector('.topic-search');
@@ -342,9 +349,45 @@ document.addEventListener('DOMContentLoaded', () => {
         const topicManualInput = topicContainer.querySelector('.topic-manual-input');
         const topicHiddenInput = topicContainer.querySelector('.topic-hidden');
 
-        // Sync inputs to hidden
-        topicManualInput.addEventListener('input', (e) => {
-            topicHiddenInput.value = e.target.value;
+        // Track selected topics for this lecture
+        const selectedTopics = []; // Stores objects { name, code }
+
+        function updateTopicHidden() {
+            const dropdownTopics = selectedTopics.map(t => t.name);
+            const manualText = topicManualInput.value.trim();
+            if (manualText) {
+                topicHiddenInput.value = [...dropdownTopics, manualText].join(', ');
+            } else {
+                topicHiddenInput.value = dropdownTopics.join(', ');
+            }
+        }
+
+        function addTopic(name, code = '') {
+            const trimmedName = name.trim();
+            if (trimmedName && !selectedTopics.some(t => t.name === trimmedName)) {
+                selectedTopics.push({ name: trimmedName, code: code });
+                updateTopicHidden();
+            }
+        }
+
+        function removeTopic(name) {
+            const idx = selectedTopics.findIndex(t => t.name === name);
+            if (idx > -1) {
+                selectedTopics.splice(idx, 1);
+                updateTopicHidden();
+            }
+        }
+
+        // Manual input: sync directly to hidden input
+        topicManualInput.addEventListener('input', () => {
+            updateTopicHidden();
+        });
+
+        // Prevent form submission on Enter in the manual input
+        topicManualInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+            }
         });
 
         function getAvailableChapters() {
@@ -377,14 +420,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
             filtered.forEach(ch => {
                 const itemDiv = document.createElement('div');
-                itemDiv.className = 'dropdown-item';
-                itemDiv.innerHTML = `${ch.name} <span style="color:#00b894;font-size:0.8rem;margin-left:4px;">(${ch.code})</span>`;
+                const isSelected = selectedTopics.some(t => t.name === ch.name);
+                itemDiv.className = 'dropdown-item' + (isSelected ? ' selected' : '');
+                itemDiv.innerHTML = `${isSelected ? '✓ ' : ''}${ch.name} <span style="color:#00b894;font-size:0.8rem;margin-left:4px;">(${ch.code})</span>`;
                 
                 itemDiv.onclick = (e) => {
                     e.preventDefault();
-                    topicSearchInput.value = ch.name;
-                    topicHiddenInput.value = ch.name;
-                    topicList.classList.remove('active');
+                    e.stopPropagation();
+                    if (isSelected) {
+                        removeTopic(ch.name);
+                    } else {
+                        addTopic(ch.name, ch.code);
+                    }
+                    topicSearchInput.value = '';
+                    renderTopics('');
                 };
 
                 topicList.appendChild(itemDiv);
@@ -415,10 +464,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 topicDropdownWrapper.style.display = 'none';
                 topicManualInput.style.display = 'block';
             }
-            // Reset fields
+            // Reset all topic selections
             topicSearchInput.value = '';
             topicManualInput.value = '';
-            topicHiddenInput.value = '';
+            selectedTopics.length = 0;
+            updateTopicHidden();
         });
 
         topicSearchInput.addEventListener('focus', () => {
@@ -611,7 +661,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Build multipart FormData payload
             const grade = formData.get('grade');
-            const batchStr = batches.join(',');
+            const batchStr = batches.join('_');
             const fileName = `Cocoon_Schedule_Grade${grade}_${batchStr}_${new Date().toISOString().split('T')[0]}.pdf`;
 
             const submitData = new FormData();
@@ -668,6 +718,11 @@ document.addEventListener('DOMContentLoaded', () => {
     async function generatePDF(config) {
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+        
+        if (window.hindiFontBase64) {
+            doc.addFileToVFS('NotoSansDevanagari.ttf', window.hindiFontBase64);
+            doc.addFont('NotoSansDevanagari.ttf', 'NotoSansDevanagari', 'normal');
+        }
         
         // Exact Brand Colors
         const NAVY = [27, 42, 74];
@@ -817,9 +872,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 const fillColor = isTest ? SUNSET_TINT : (rowIdx % 2 === 0 ? [255,255,255] : GREY_ROW);
                 const subjStyle = isTest ? 'bold' : 'normal';
                 
+                const isHindiLang = ['Hindi', 'Marathi', 'Sanskrit'].includes(s.subject);
+                const localFont = (isHindiLang && window.hindiFontBase64) ? 'NotoSansDevanagari' : 'times';
+
                 row.push({ content: s.time, styles: { textColor: GREY_TEXT, fillColor: fillColor, halign: 'center' } });
-                row.push({ content: s.subject, styles: { fontStyle: subjStyle, fillColor: fillColor, halign: 'left', textColor: BLACK } });
-                row.push({ content: s.chapter || '—', styles: { textColor: s.chapter ? BLACK : GREY_TEXT, fillColor: fillColor, halign: 'left' } });
+                row.push({ content: s.subject, styles: { font: 'times', fontStyle: subjStyle, fillColor: fillColor, halign: 'left', textColor: BLACK } });
+                
+                const chapStyles = { font: localFont, textColor: s.chapter ? BLACK : GREY_TEXT, fillColor: fillColor, halign: 'left' };
+                if (isHindiLang && s.chapter) chapStyles.textColor = fillColor; // Invisible, will draw via Canvas
+
+                row.push({ content: s.chapter || '—', styles: chapStyles });
                 row.push({ content: s.teacher || '—', styles: { textColor: s.teacher ? BLACK : GREY_TEXT, fillColor: fillColor, halign: 'left' } });
                 
                 currentChunk.push(row);
@@ -866,6 +928,61 @@ document.addEventListener('DOMContentLoaded', () => {
                     3: { cellWidth: 26, halign: 'left' },
                     4: { halign: 'left' }, // Flex width
                     5: { cellWidth: 26, halign: 'left' }
+                },
+                didDrawCell: function(data) {
+                    if (data.column.index === 4 && data.section === 'body') {
+                        const subjectCell = data.row.cells[3];
+                        if (!subjectCell) return;
+                        
+                        const subject = subjectCell.text.join(' ');
+                        const chapter = data.cell.raw.content;
+                        
+                        if (['Hindi', 'Marathi', 'Sanskrit'].includes(subject) && chapter && chapter !== '—') {
+                            const lines = data.cell.text;
+                            if (!lines || lines.length === 0) return;
+
+                            const canvas = document.createElement('canvas');
+                            const ctx = canvas.getContext('2d');
+                            const scale = 4;
+                            const fontSizePx = 9.5 * scale; // 1 pixel = 1 point in our scaling math
+                            
+                            ctx.font = `${fontSizePx}px sans-serif`;
+                            let maxW = 0;
+                            lines.forEach(line => {
+                                const w = ctx.measureText(line).width;
+                                if (w > maxW) maxW = w;
+                            });
+                            
+                            canvas.width = Math.max(maxW, 1);
+                            canvas.height = lines.length * (fontSizePx * 1.4); 
+                            
+                            ctx.font = `${fontSizePx}px sans-serif`;
+                            ctx.textBaseline = 'top';
+                            ctx.fillStyle = '#1A1A1A';
+                            
+                            lines.forEach((line, i) => {
+                                ctx.fillText(line, 0, i * (fontSizePx * 1.15) + (1 * scale));
+                            });
+                            
+                            const imgData = canvas.toDataURL('image/png');
+                            const pdfX = data.cell.x + data.cell.padding('left');
+                            const pdfY = data.cell.y + data.cell.padding('top');
+                            const mm2pt = 2.83465;
+                            
+                            let pdfW = (canvas.width / scale) / mm2pt;
+                            let pdfH = (canvas.height / scale) / mm2pt;
+                            
+                            // Prevent crossing cell boundaries if native font is wider than expected
+                            const availableW = data.cell.width - data.cell.padding('left') - data.cell.padding('right');
+                            if (pdfW > availableW) {
+                                const shrinkRatio = availableW / pdfW;
+                                pdfW = availableW;
+                                pdfH = pdfH * shrinkRatio; // maintain aspect ratio
+                            }
+                            
+                            doc.addImage(imgData, 'PNG', pdfX, pdfY, pdfW, pdfH);
+                        }
+                    }
                 },
                 didParseCell: function(data) {
                     if (data.section === 'head' && [3,4,5].includes(data.column.index)) {
