@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', () => {
+﻿document.addEventListener('DOMContentLoaded', () => {
     const daysContainer = document.getElementById('daysContainer');
     const dayTemplate = document.getElementById('dayTemplate').innerHTML;
     const lectureTemplate = document.getElementById('lectureTemplate').innerHTML;
@@ -683,7 +683,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             btn.textContent = 'Submitting...';
 
-            const WEBHOOK_URL = 'https://n8n.srv1498466.hstgr.cloud/webhook/f2a69329-3814-4cb5-9123-7c1c3d063421';
+            const WEBHOOK_URL = 'https://n8n.srv1761768.hstgr.cloud/webhook/f2a69329-3814-4cb5-9123-7c1c3d063421';
             const response = await fetch(WEBHOOK_URL, { method: 'POST', body: submitData });
 
             if (!response.ok) throw new Error(`Webhook returned HTTP ${response.status}`);
